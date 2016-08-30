@@ -1,0 +1,116 @@
+---
+title: "MLA Assignment"
+output:
+  html_document:
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Background  
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data  
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. Thank you for the use of the data for learning purposes.  
+
+## Setting up  
+First we need the following R libraries.  
+
+```{r}
+library(caret)
+library(rpart)
+library(randomForest)
+```
+
+## Reading the Data  
+Reading the data was a bit tricky because of the way that nulls are coded.  I went through the files and decided that there were three null values.  I coded those in na.strings option.  
+
+```{r}
+data <- read.csv("pml-training.csv", stringsAsFactors = FALSE,na.strings=c("#DIV/0!","","NA"))
+score <- read.csv("pml-testing.csv", stringsAsFactors = FALSE,na.strings=c("#DIV/0!","","NA"))
+```
+
+
+## Data Exploration 
+I took a look at the outcome variable to make sure that it had the right values.  
+
+
+```{r}
+classe <- as.factor(data$classe)
+table(classe)
+```
+
+There are 160 variables in the dataset, so the first task was the whittle the number of explanatory variables.  We know that the explantory variables of interest will have measurements related to belt,arm, and dumbbell, so it was easy to grab variables whose names had these keywords in them.  The number of variables now went from 160 to 114.
+
+```{r}
+filter = grepl("belt|arm|dumbell", names(data))
+data2 = data[, filter]
+```
+
+The data has a lot of missing values.  In fact, variables that have missing values seem to be missing for a vast majority of rows, so it does not make sense to impute these values.  Code below identifies how many missing values per column and then removes these columns from our dataset.  Now we are down to only 39 explanatory variables.  
+
+```{r}
+missing= data.frame(colSums(is.na(data2)))
+missing= missing[missing$colSums.is.na.data2..>0,] 
+missing
+good.cols = colSums(is.na(data2)) == 0
+data3 = data2[, good.cols]
+```
+
+The following code adds outcome variable back in to the dataset.  
+
+```{r}
+data3$classe=classe
+str(data3)
+```
+
+## Data Partitioning
+
+I set the seed so that the partitioning is reproducible.  
+
+```{r}
+set.seed(12463)
+inTrain = createDataPartition(y=classe, p=0.75, list=FALSE)
+train = data3[inTrain,]
+test = data3[-inTrain,]
+```
+
+## Data Modeling 
+I choose decision trees because they are easy to interpret and ranom forests because they are better in accuracy.  I tried using the train function in the caret package, but that took too long to run.  (The random forest model did not finish even after several hours and the decision tree model was quite poor in accuracy.)  So, I used the rpart and random forests packages.  
+
+As can be seen, the decision tree model is good (about 72 percent accurate), but the random forests model is much much better, with an accuracy of 99%!!!  
+
+
+```{r}
+modFit1 <- rpart(classe ~ ., data = train, method="class")
+modFit1
+confusionMatrix(predict(modFit1,train,type="class"),train$classe)
+confusionMatrix(predict(modFit1,test,type="class"),test$classe)
+
+
+modFit2 <- randomForest(classe ~ ., data = train, ntree = 100)
+confusionMatrix(predict(modFit2,train,type="class"),train$classe)
+confusionMatrix(predict(modFit2,test,type="class"),test$classe)
+```
+
+## Conclusion and Scoring  
+Needless to say, the random forest model was chosen.  
+The following code scores the test dataset and prints out the predictions.  
+
+```{r}
+scored=predict(modFit2,score,type="class")
+scored
+```
+
+
